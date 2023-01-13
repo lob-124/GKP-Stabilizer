@@ -4,7 +4,7 @@ path.insert(0,"../Frederik/")
 
 import gaussian_bath as gb
 
-from numpy import sqrt,exp,zeros
+from numpy import sqrt,exp,zeros,complex128
 from scipy.integrate import ode
 
 
@@ -94,25 +94,28 @@ def time_evo(t_1,t_2,H,dt=None):
         		\tilde{L}_{mn} = f(E_n-E_m; t)X_{mn} 
 	"""
 
-	D = H.shape[0]		#Hilbert space dimension
+	D = H(0).shape[0]		#Hilbert space dimension
 
-	#Right-hand side of the ODE y' = H(t)y
+	#Right-hand side of the ODE i*h_bar*y' = H(t)y
 	#	-> TODO: is hbar = 1??
 	def _f(t,y):
 		return -1j*H(t) @ y
 
-	evo_ode = ode(_f)	#the ODE object
-	U = zeros((D,D))	#matrix where we store the output
+
+	schr_eqn = ode(_f)	#the ODE object
+	schr_eqn.set_integrator("zvode")
+	U = zeros((D,D),dtype=complex128)	#matrix where we store the output
 
 	#Time evolve each basis vector to get the columns of the unitary U
 	#	!!!!!!!!!!!!!!!
 	#	-> TODO: (Possible) PROBLEM: IS THIS INTEGRATION UNITARY??????
 	#	!!!!!!!!!!!!!!!
 	for i in range(D):
-		c = zeros(D)
+		c = zeros(D,dtype=complex128)
 		c[i] = 1.0
-		evo_ode.set_initial_value(c,t_1)
-		U[:,i] = evo_ode.integrate(t_2)
+		schr_eqn.set_initial_value(c,t_1)
+		U[:,i] = schr_eqn.integrate(t_2)
+		
 
 	return U
 
@@ -122,6 +125,66 @@ def time_evo(t_1,t_2,H,dt=None):
 
 
 if __name__ == "__main__":
-	omega = 0.1
-	E1 , E2 = 2.0,1.0
-	print(gb.window_function(omega,E1,E2))
+
+	from numpy.random import rand
+	from numpy import diag,ones,allclose
+	from scipy.linalg import expm
+
+	####****     ****####
+	####    TESTS    ####
+	####****     ****####
+
+	D = 10
+
+	####
+	##  Test 1: Generate time evo for random, static Hamiltonian
+	####
+	_H = rand(D,D)
+	_H = (_H + _H.T)/2
+	def H(t):
+		return _H
+
+	for t in [0.1,0.2,0.3,0.4,0.5]:
+		U = time_evo(0,t,H)
+		print(U)
+		print(expm(-1j*t*_H))
+		assert allclose(U,expm(-1j*t*_H)) , "failed at time t = {}".format(t)
+
+	print("Test 1 passed!")
+
+
+
+
+	####
+	##  Test 2: Generate time evo for simple, exactly solvable time-dependent Hamiltonian
+	####
+	from numpy import cos, sin, pi
+	def H(t):
+		return diag([cos(pi*i*t/D) for i in range(1,D+1)])
+
+	def U_exact(t):
+		return expm(-1j*diag([(D/(i*pi))*sin(pi*i*t/D) for i in range(1,D+1)]))
+
+	for t in [0.1,0.2,0.3,0.4,0.5]:
+		U = time_evo(0,t,H)
+		assert allclose(U,U_exact(t)) , "failed at time t = {}".format(t)
+
+	print("Test 2 passed!")
+
+
+	####
+	##  Test 3: Test unitarity 
+	####
+	from numpy import eye
+	H_diag = diag(list(range(D)))
+	H_off_diag = diag(ones(D-1),1) + diag(ones(D-1),-1)
+
+	def H(t,omega=1.0):
+		return cos(2*pi*t/omega)*H_diag + sin(2*pi*t/omega)*H_off_diag
+
+
+	for t in [0.1,0.2,0.3,0.4,0.5]:
+		U = time_evo(0,t,H)
+		assert allclose(U.conj().T @ U,eye(D)) , "failed at time t = {}".format(t)
+
+	print("Test 3 passed!")
