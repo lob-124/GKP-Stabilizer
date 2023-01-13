@@ -4,6 +4,9 @@ path.insert(0,"../Frederik/")
 
 import gaussian_bath as gb
 
+from numpy import sqrt,exp,zeros
+from scipy.integrate import ode
+
 
 def f(bath,W_ft,delta_t,gamma):
 	"""
@@ -36,7 +39,7 @@ def f(bath,W_ft,delta_t,gamma):
 
 def L_tilde_energy_basis(X,f,t,energies):
 	"""
-	Return the (non-time evolved) jump operator \tilde{L}, in the energy basis of the 
+	Computes the (non-time evolved) jump operator \tilde{L}, in the energy basis of the 
 		static system Hamiltonian H_0
 
 	Parameters
@@ -65,6 +68,55 @@ def L_tilde_energy_basis(X,f,t,energies):
 			L_tilde[m,n] = f(energies[n]-energies[m],t)*X[m,n]
 
 	return L_tilde
+
+
+def time_evo(t_1,t_2,H,dt=None):
+	"""
+	Computes the time-evolution operator U(t_2,t_1) from t_1 to t_2
+
+	Parameters
+    ----------
+    t_1 : float
+        The starting time 
+    t_2: float
+    	The end time
+    H: callable
+    	Given a time t, H(t) returns the Hamiltonian, expressed as a matrix in a chosen basis 
+	energies: array
+		An array of the energy eigenvalues correpsonding to each eigenvector in basis above
+	dt: float
+		Timestep to use 
+
+    Returns
+    -------
+    L_tilde : ndarray
+        The (non-time evolved) jump-operator in the energy basis. The components are:
+        		\tilde{L}_{mn} = f(E_n-E_m; t)X_{mn} 
+	"""
+
+	D = H.shape[0]		#Hilbert space dimension
+
+	#Right-hand side of the ODE y' = H(t)y
+	#	-> TODO: is hbar = 1??
+	def _f(t,y):
+		return -1j*H(t) @ y
+
+	evo_ode = ode(_f)	#the ODE object
+	U = zeros((D,D))	#matrix where we store the output
+
+	#Time evolve each basis vector to get the columns of the unitary U
+	#	!!!!!!!!!!!!!!!
+	#	-> TODO: (Possible) PROBLEM: IS THIS INTEGRATION UNITARY??????
+	#	!!!!!!!!!!!!!!!
+	for i in range(D):
+		c = zeros(D)
+		c[i] = 1.0
+		evo_ode.set_initial_value(c,t_1)
+		U[:,i] = evo_ode.integrate(t_2)
+
+	return U
+
+
 
 
 
