@@ -108,7 +108,7 @@ def time_evo(t_1,t_2,H,dt=None):
 
 	#Time evolve each basis vector to get the columns of the unitary U
 	#	!!!!!!!!!!!!!!!
-	#	-> TODO: (Possible) PROBLEM: IS THIS INTEGRATION UNITARY??????
+	#	-> TODO: This isn't unitary. Need to replace
 	#	!!!!!!!!!!!!!!!
 	for i in range(D):
 		c = zeros(D,dtype=complex128)
@@ -144,7 +144,7 @@ if __name__ == "__main__":
 	def H(t):
 		return _H
 
-	for t in [0.1,0.2,0.3,0.4,0.5]:
+	for t in [0.1,0.2,0.3,0.4,0.5,1.0]:
 		U = time_evo(0,t,H)
 		print(U)
 		print(expm(-1j*t*_H))
