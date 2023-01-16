@@ -28,7 +28,10 @@ Tc = 2*pi/cavity_frequency
 #dt_0 = Tc/4*0.972	#What was this?
 #T = Tc/4+dt_JJ	#Why was this here?
 T = Tc/4
-dt_JJ = 
+dt_JJ = .01*T
 Omega = 2*pi/T
 
 quantization_parameter  = 0.999
+
+#Frequency to truncate fourier expansion of switching function at
+q_max = 1000
