@@ -2,14 +2,19 @@
 from sys import path
 path.insert(0,"../Frederik/")
 
+from gaussian_bath import bath,get_J_ohmic
 
 
 import jump_static as js
+from integrate import time_evolve
 from params import *
 
 from numpy.linalg import eigh
 from scipy.linalg import expm
 from numpy import linspace,diag,cos,exp
+
+
+
 
 if __name__ == "__main__":
 
@@ -60,6 +65,9 @@ if __name__ == "__main__":
 
 
 	## BATH ##
+
+	# Spectral function
+	J = get_J_ohmic(Temp,omega_c,omega0=omega0)
 
 	# Frequency resolution  (only used to  calculating bath timescales in ULE module).
 	wvec = linspace(-10*2*pi/dt_JJ,10*2*pi/dt_JJ,10000)
@@ -138,7 +146,7 @@ if __name__ == "__main__":
 	#Projects an arbitrary time t into the one period interval [-T/2 , T/2]
 	def mod(t):
 		_temp = t % T
-		if t > T/2:
+		if _temp > T/2:
 			return _temp - T
 		else: 
 			return _temp 
@@ -147,7 +155,7 @@ if __name__ == "__main__":
 	## EFFECTIVE HAMILTONIAN FOR SSE EVOLUTION ##
 
 	#The f function appearing in the jump operators
-	f_func = f(B,(W_fourier,frequencies),dt_JJ,gamma)
+	f_func = js.f(B,(W_fourier,frequencies),dt_JJ,gamma)
 
 	#The system Hamiltonian (as a function of time)
 	def H_t(t):
@@ -156,9 +164,9 @@ if __name__ == "__main__":
 		else: 
 			return H0
 
-	#Compute the effective Hamiltonian governing SSE Evolution
-	def H_eff(t):
-		t_proj = mod(t)
+	#The jump operators at time t
+	def jump_ops(t):
+		t_proj = mod(t)	#Project t into the interval [-T/2,T/2]
 
 		#Compute the time evolution U(delta_t,t), and its conjugate, appearing in the jump
 		#	operators. Note we have to handle separately the case t < delta_t because of how 
@@ -170,11 +178,104 @@ if __name__ == "__main__":
 			U_dag = time_evo(t_proj,dt_JJ,dt_JJ)
 			U = U_dag.conj().T
 
-		L_1 = U @ L_tilde_energy_basis(X1,f_func,t_proj,E0) @ U_dag
-		L_2 = U @ L_tilde_energy_basis(X2,f_func,t_proj,E0) @ U_dag
+		L_1 = U @ js.L_tilde_energy_basis(X1,f_func,t_proj,E0) @ U_dag
+		L_2 = U @ js.L_tilde_energy_basis(X2,f_func,t_proj,E0) @ U_dag
 
-		return H_t(t) - (1j*hbar/2)*gamma*(L1.conj().T @ L1 + L2.conj().T @ L2)
+		return L_1,L_2
+
+
+	#Compute the effective Hamiltonian governing SSE Evolution
+	def H_eff(t):
+		L_1 , L_2 = jump_ops(t)
+		return H_t(t) - (1j*hbar/2)*gamma*(L_1.conj().T @ L_1 + L_2.conj().T @ L_2)
+
+
 
 
 	## SSE EVOLUTION ##
+
+	#Initial wavefunction 
+	psi_0 = V0[:,0] + V0[:,1]
+	psi_0 *= 1/norm(psi_0) 
+
+	#Timestep & t values
+	dt = .01*dt_JJ
+	t_vals = arange(0,T+dt/2,dt)
+
+	
+	jumps = []
+	well_imbalance = []
+	other_paulis = []	#figure out from Frederik what this is
+	#rhos = []
+	#psis = []
+	#wigners = []
+	for sample_num in range(nsamples):
+		#Keep track of jumps & imbalance for this sample
+		jumps_this_sample = []
+		imbalance_this_sample = []
+		other_paulis_this_sample = []
+
+		r = random()	#Random number to compare norm of wavefunction to
+
+		psi = psi_0		#The current wavefunction, initialized to psi_0
+		for i in range(num_periods):
+			if i%100:
+				print("Currently on cycle {} out of {}".format(i,num_periods))
+			for t in t_vals:
+				#Time evolve, employing the Taylor expansion method in integrate.py
+				psi = time_evolve(psi,H_eff,i*T+t,dt)
+
+				#Check if there is a quantum jump, and proceed accordingly
+				if (1 - norm(psi)**2) > - r:
+					jump_time = i*T+t-dt/2	#Estimate time of jump as t-dt/2
+
+					#Get jump operators at this time
+					L_1 , L_2 = jump_ops(jump_time)	
+
+					#Determine the type of jump, and jump the wavefunction accordingly
+					p_1 = norm(L_1 @ psi)**2
+					p_2 = norm(L_2 @ psi)**2
+					if random() < p_1/(p_1+p_2):
+						jumps_this_sample.append((1,jump_time))
+						psi = L_1 @ psi
+					else:
+						jumps_this_sample.append((2,jump_time))
+						psi = L_2 @ psi
+
+					#In either case, re-normalize the wavefunction and re-set the random variable r
+					psi = psi/norm(psi)
+					r = random()
+
+				#end jump if block
+			#end for loop over current cycle
+
+			#Measure once only every oscillation period of the bare LC circuit 
+			if (i % 4) == 0:
+				imbalance_this_sample.append(sum(abs(psi)**2*well_projector)/norm(psi)**2)
+				other_paulis_this_sample.append(sum(psi@psi[::-1].conj())/norm(psi)**2)
+
+		#end for loop over cycles
+
+		jumps.append(jumps_this_sample)
+		well_imbalance.append(imbalance_this_sample)
+		other_paulis.append(other_paulis_this_sample)
+	#end for loop over samples
+
+	#Plot the well imbalance
+	plt.figure()
+	for sample_num in range(nsamples):
+		plt.plot(list(range(0,num_periods,4)),imbalance_this_sample[sample_num])
+	
+	plt.xlabel("Driving Period")
+	plt.ylabel("Well Imbalance")
+	plt.show()
+
+
+
+
+
+
+
+
+
 

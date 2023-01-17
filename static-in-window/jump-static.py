@@ -3,8 +3,10 @@ from sys import path
 path.insert(0,"../Frederik/")
 
 import gaussian_bath as gb
+from units import *
 
-from numpy import sqrt,exp,zeros,complex128
+from numpy import sqrt,exp,zeros,eye,arange,vdot,complex128
+from numpy.linalg import norm
 from scipy.integrate import ode
 
 
@@ -70,60 +72,6 @@ def L_tilde_energy_basis(X,f,t,energies):
 	return L_tilde
 
 
-def time_evo(t_1,t_2,H,dt=None):
-	"""
-	Computes the time-evolution operator U(t_2,t_1) from t_1 to t_2
-
-	Parameters
-    ----------
-    t_1 : float
-        The starting time 
-    t_2: float
-    	The end time
-    H: callable
-    	Given a time t, H(t) returns the Hamiltonian, expressed as a matrix in a chosen basis 
-	energies: array
-		An array of the energy eigenvalues correpsonding to each eigenvector in basis above
-	dt: float
-		Timestep to use 
-
-    Returns
-    -------
-    L_tilde : ndarray
-        The (non-time evolved) jump-operator in the energy basis. The components are:
-        		\tilde{L}_{mn} = f(E_n-E_m; t)X_{mn} 
-	"""
-
-	D = H(0).shape[0]		#Hilbert space dimension
-
-	#Right-hand side of the ODE i*h_bar*y' = H(t)y
-	#	-> TODO: is hbar = 1??
-	def _f(t,y):
-		return -1j*H(t) @ y
-
-
-	schr_eqn = ode(_f)	#the ODE object
-	schr_eqn.set_integrator("zvode")
-	U = zeros((D,D),dtype=complex128)	#matrix where we store the output
-
-	#Time evolve each basis vector to get the columns of the unitary U
-	#	!!!!!!!!!!!!!!!
-	#	-> TODO: This isn't unitary. Need to replace
-	#	!!!!!!!!!!!!!!!
-	for i in range(D):
-		c = zeros(D,dtype=complex128)
-		c[i] = 1.0
-		schr_eqn.set_initial_value(c,t_1)
-		U[:,i] = schr_eqn.integrate(t_2)
-		
-
-	return U
-
-
-
-
-
-
 if __name__ == "__main__":
 
 	from numpy.random import rand
@@ -134,7 +82,7 @@ if __name__ == "__main__":
 	####    TESTS    ####
 	####****     ****####
 
-	D = 10
+	D = 100
 
 	####
 	##  Test 1: Generate time evo for random, static Hamiltonian
@@ -143,12 +91,24 @@ if __name__ == "__main__":
 	_H = (_H + _H.T)/2
 	def H(t):
 		return _H
+	
+	dt = .005
+	for t in [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]:
+		psi_0 = rand(D)
+		psi_0 = psi_0/norm(psi_0)
 
-	for t in [0.1,0.2,0.3,0.4,0.5,1.0]:
-		U = time_evo(0,t,H)
-		print(U)
-		print(expm(-1j*t*_H))
-		assert allclose(U,expm(-1j*t*_H)) , "failed at time t = {}".format(t)
+		psi = psi_0.astype(complex128)
+		time = 0
+		while time <= t:
+			psi = time_evolve(psi,H,time,dt,5)
+			time += dt
+		print([1.0,vdot(psi,expm(-1j*t*_H/hbar)@psi_0)])
+
+
+		U = time_evolution(0,t,dt,H,5)
+		print(norm(U-expm(-1j*t*_H/hbar),ord="fro"))
+		
+		#assert allclose([1.0,U@psi.dot(expm(-1j*t*_H)@psi)]) , "failed at time t = {}".format(t)
 
 	print("Test 1 passed!")
 
@@ -165,8 +125,9 @@ if __name__ == "__main__":
 	def U_exact(t):
 		return expm(-1j*diag([(D/(i*pi))*sin(pi*i*t/D) for i in range(1,D+1)]))
 
+	dt = .005
 	for t in [0.1,0.2,0.3,0.4,0.5]:
-		U = time_evo(0,t,H)
+		U = time_evolution(0,t,dt,H)
 		assert allclose(U,U_exact(t)) , "failed at time t = {}".format(t)
 
 	print("Test 2 passed!")
@@ -182,9 +143,9 @@ if __name__ == "__main__":
 	def H(t,omega=1.0):
 		return cos(2*pi*t/omega)*H_diag + sin(2*pi*t/omega)*H_off_diag
 
-
+	dt = .005
 	for t in [0.1,0.2,0.3,0.4,0.5]:
-		U = time_evo(0,t,H)
+		U = time_evolution(0,t,dt,H)
 		assert allclose(U.conj().T @ U,eye(D)) , "failed at time t = {}".format(t)
 
 	print("Test 3 passed!")

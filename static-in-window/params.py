@@ -3,6 +3,7 @@ from sys import path
 path.insert(0,"../Frederik/")
 
 from units import *
+from numpy import linspace
 
 
 nsamples = 1            # Number of samples in SSE simulation
