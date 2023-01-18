@@ -9,16 +9,21 @@ from numpy import sqrt,exp,zeros,eye,arange,vdot,complex128
 from numpy.linalg import norm
 from scipy.integrate import ode
 
+from numba import jit
 
-def f(bath,W_ft,delta_t,gamma):
+
+
+
+#@jit(nopython=True)
+def f(J,W_ft,delta_t,gamma):
 	"""
 	
 	Return the scalar-valued function f appearing in the jump operators
 
 	Parameters
     ----------
-    bath : bath
-        The bath in question
+    J : callable
+        The spectral function of the bath in question
     W_ft: tuple of array(complex), array(float)
     	The Fourier components of the switching function W, and the frequencies
     delta_t: float
@@ -33,12 +38,13 @@ def f(bath,W_ft,delta_t,gamma):
 	"""
 
 	def _f(E,t):
-		_temp = [sqrt(2*pi*gamma*bath.J(E+w))*W_w*exp(-1j*w*t +1j*E*(t-delta_t)) for W_w, w in zip(*W_ft)]
+		_temp = [sqrt(2*pi*gamma*J(E+w))*W_w*exp(-1j*w*t +1j*E*(t-delta_t)) for W_w, w in zip(*W_ft)]
 		return sum(_temp)
 
 	return _f
 
 
+#@jit(nopython=True)
 def L_tilde_energy_basis(X,f,t,energies):
 	"""
 	Computes the (non-time evolved) jump operator \tilde{L}, in the energy basis of the 
@@ -65,8 +71,12 @@ def L_tilde_energy_basis(X,f,t,energies):
 	D = len(energies)
 	L_tilde = zeros((D,D))
 
-	for i in range(D):
-		for j in range(D):
+	for m in range(D):
+		# if m%20==0:
+		# 	print("On row {} out of {}".format(m,D))
+		for n in range(D):
+			#if n%20==0:
+				#print("\tOn column {} out of {}".format(n,D))
 			L_tilde[m,n] = f(energies[n]-energies[m],t)*X[m,n]
 
 	return L_tilde
