@@ -89,7 +89,8 @@ def L_tilde_energy_basis(X,t,energies,W_ft,delta_t,gamma,temp,Lambda,omega_0=1):
 
     for m in range(D):
         for n in range(D):
-            L_tilde[m,n] = f(energies[n]-energies[m],t,W_ft,delta_t,gamma,temp,Lambda,omega_0)*X[m,n]
+            L_tilde[m,n] = exp(-(energies[n]-energies[m])/t)*X[m,n]
+            #L_tilde[m,n] = f2(energies[n]-energies[m],t,W_ft,delta_t,gamma,temp,Lambda,omega_0)*X[m,n]
 
     return L_tilde
 

@@ -15,7 +15,7 @@ from scipy.linalg import expm
 from numpy import linspace,diag,cos,exp
 
 
-from time import time
+from time import perf_counter
 
 if __name__ == "__main__":
 
@@ -58,11 +58,19 @@ if __name__ == "__main__":
 	H0 = H0pot + H0kin
 
 	#Diagonalize H0 (needed for computing jump operators)
-	E0,V0 = eigh(H0) 
+	_E0,_V0 = eigh(H0)
+
+	#Truncate the Hilbert space to keep only the N_trunc lowest lying
+	#	energy levels
+	E0 , V0 = _E0[:N_trunc] , _V0[:,:N_trunc] 
 
 	# Josephson potential 
 	V  = Josephson_energy * diag(cos(phi))
 	H1 = H0 + V
+
+	#H1 and H0 in the truncated Hilbert space
+	H0_trunc = diag(E0)
+	H1_trunc = V0.conj().T @ H1 @ V0
 
 
 	## BATH ##
@@ -80,7 +88,8 @@ if __name__ == "__main__":
 #Now onto original(-ish) stuff by me
 
 	#Fourier components for the resistor coupling W(t)
-	W_fourier = [1j*(1-exp(1j*Omega*q*dt_JJ))/(2*pi*q) for q in range(-q_max,q_max+1)]
+	#W_fourier = [1j*(1-exp(1j*Omega*q*dt_JJ))/(2*pi*q) for q in range(-q_max,q_max+1)]
+	W_fourier = [sqrt(pi*tau)*exp(-Omega*q*(4j*t_0+q*Omega*tau**2)) for q in range(-q_max,q_max+1)]
 	frequencies = [Omega*q for q in range(-q_max,q_max+1)]
 
 
@@ -159,11 +168,21 @@ if __name__ == "__main__":
 	#f_func = js.f(B.J,(W_fourier,frequencies),dt_JJ,gamma)
 
 	#The system Hamiltonian (as a function of time)
-	def H_t(t):
-		if (t % T) <= dt_JJ:
-			return H1
+	def H_t(t,trunc=True):
+		if trunc:
+			if (t % T) <= dt_JJ:
+				return H1_trunc
 		else: 
-			return H0
+				return H0_trunc
+		else:
+			if (t % T) <= dt_JJ:
+				return H1
+			else: 
+				return H0
+
+	#Transform the physical operators to the energy basis (eigenstates of H0)
+	X1_E = V0.conj().T @ X1 @ V0
+	X2_E = V0.conj().T @ X2 @ V0
 
 	#The jump operators at time t
 	def jump_ops(t):
@@ -184,93 +203,107 @@ if __name__ == "__main__":
 		#print("doing the second thing")
 		#L_2 = U @ js.L_tilde_energy_basis(X2,f_func,t_proj,E0) @ U_dag
 
-		L_1 = U @ js.L_tilde_energy_basis(X1,t_proj,E0,(W_fourier,frequencies),dt_JJ,gamma,Temp,omega_c,omega0) @ U_dag
-		L_2 = U @ js.L_tilde_energy_basis(X2,t_proj,E0,(W_fourier,frequencies),dt_JJ,gamma,Temp,omega_c,omega0) @ U_dag
+		L_1 = U @ js.L_tilde_energy_basis(X1_E,t_proj,E0,(W_fourier,frequencies),dt_JJ,gamma,Temp,omega_c,omega0) @ U_dag
+		L_2 = U @ js.L_tilde_energy_basis(X2_E,t_proj,E0,(W_fourier,frequencies),dt_JJ,gamma,Temp,omega_c,omega0) @ U_dag
 
 		return L_1,L_2
 
-	_t1 = time() 
-	jump_ops(T/2)
-	_t2 = time()
-	print("Time elapsed: {} seconds".format(_t2-_t1))
+	# _t1 = perf_counter() 
+	# jump_ops(T/2)
+	# _t2 = perf_counter()
+	# print("Time elapsed: {} seconds".format(_t2-_t1))
+
+	# _t1 = perf_counter() 
+	# jump_ops(T/2)
+	# _t2 = perf_counter()
+	# print("Time elapsed: {} seconds".format(_t2-_t1))
+
+	# _t1 = perf_counter() 
+	# L_1,L_2 = jump_ops(T/2)
+	# _t2 = perf_counter()
+	# print("Time elapsed: {} seconds".format(_t2-_t1))
+
+	# print(L_1.shape)
 
 
-	# #Compute the effective Hamiltonian governing SSE Evolution
-	# def H_eff(t):
-	# 	L_1 , L_2 = jump_ops(t)
-	# 	return H_t(t) - (1j*hbar/2)*gamma*(L_1.conj().T @ L_1 + L_2.conj().T @ L_2)
+	#Compute the effective Hamiltonian governing SSE Evolution
+	def H_eff(t):
+		L_1 , L_2 = jump_ops(t)
+		return H_t(t) - (1j*hbar/2)*gamma*(L_1.conj().T @ L_1 + L_2.conj().T @ L_2)
 
 
 
 
 	# ## SSE EVOLUTION ##
 
-	# #Initial wavefunction 
-	# psi_0 = V0[:,0] + V0[:,1]
-	# psi_0 *= 1/norm(psi_0) 
+	#Initial wavefunction 
+	psi_0 = zeros(N_trunc)
+	psi_0[0] = 1/sqrt(2)
+	psi_0[1] = 1/sqrt(2) 
 
-	# #Timestep & t values
-	# dt = .01*dt_JJ
-	# t_vals = arange(0,T+dt/2,dt)
+	#Timestep & t values
+	dt = .01*dt_JJ
+	t_vals = arange(0,T+dt/2,dt)
 
 	
-	# jumps = []
-	# well_imbalance = []
-	# other_paulis = []	#figure out from Frederik what this is
-	# #rhos = []
-	# #psis = []
-	# #wigners = []
-	# for sample_num in range(nsamples):
-	# 	#Keep track of jumps & imbalance for this sample
-	# 	jumps_this_sample = []
-	# 	imbalance_this_sample = []
-	# 	other_paulis_this_sample = []
+	jumps = []
+	well_imbalance = []
+	other_paulis = []	#figure out from Frederik what this is
+	#rhos = []
+	#psis = []
+	#wigners = []
+	for sample_num in range(nsamples):
+		#Keep track of jumps & imbalance for this sample
+		jumps_this_sample = []
+		imbalance_this_sample = []
+		other_paulis_this_sample = []
 
-	# 	r = random()	#Random number to compare norm of wavefunction to
+		r = random()	#Random number to compare norm of wavefunction to
 
-	# 	psi = psi_0		#The current wavefunction, initialized to psi_0
-	# 	for i in range(num_periods):
-	# 		if i%100:
-	# 			print("Currently on cycle {} out of {}".format(i,num_periods))
-	# 		for t in t_vals:
-	# 			#Time evolve, employing the Taylor expansion method in integrate.py
-	# 			psi = time_evolve(psi,H_eff,i*T+t,dt)
+		psi = psi_0		#The current wavefunction, initialized to psi_0
+		for i in range(num_periods):
+			if i%10:
+				print("Currently on cycle {} out of {}".format(i,num_periods))
+			for t in t_vals:
+				#Time evolve, employing the Taylor expansion method in integrate.py
+				psi = time_evolve(psi,H_eff,i*T+t,dt)
 
-	# 			#Check if there is a quantum jump, and proceed accordingly
-	# 			if (1 - norm(psi)**2) > - r:
-	# 				jump_time = i*T+t-dt/2	#Estimate time of jump as t-dt/2
+				#Check if there is a quantum jump, and proceed accordingly
+				if (1 - norm(psi)**2) > - r:
+					jump_time = i*T+t-dt/2	#Estimate time of jump as t-dt/2
 
-	# 				#Get jump operators at this time
-	# 				L_1 , L_2 = jump_ops(jump_time)	
+					#Get jump operators at this time
+					L_1 , L_2 = jump_ops(jump_time)	
 
-	# 				#Determine the type of jump, and jump the wavefunction accordingly
-	# 				p_1 = norm(L_1 @ psi)**2
-	# 				p_2 = norm(L_2 @ psi)**2
-	# 				if random() < p_1/(p_1+p_2):
-	# 					jumps_this_sample.append((1,jump_time))
-	# 					psi = L_1 @ psi
-	# 				else:
-	# 					jumps_this_sample.append((2,jump_time))
-	# 					psi = L_2 @ psi
+					#Determine the type of jump, and jump the wavefunction accordingly
+					p_1 = norm(L_1 @ psi)**2
+					p_2 = norm(L_2 @ psi)**2
+					if random() < p_1/(p_1+p_2):
+						jumps_this_sample.append((1,jump_time))
+						psi = L_1 @ psi
+					else:
+						jumps_this_sample.append((2,jump_time))
+						psi = L_2 @ psi
 
-	# 				#In either case, re-normalize the wavefunction and re-set the random variable r
-	# 				psi = psi/norm(psi)
-	# 				r = random()
+					#In either case, re-normalize the wavefunction and re-set the random variable r
+					psi = psi/norm(psi)
+					r = random()
 
-	# 			#end jump if block
-	# 		#end for loop over current cycle
+				#end jump if block
+			#end for loop over current cycle
+			print(psi[-5:]/norm(psi))
 
 	# 		#Measure once only every oscillation period of the bare LC circuit 
 	# 		if (i % 4) == 0:
 	# 			imbalance_this_sample.append(sum(abs(psi)**2*well_projector)/norm(psi)**2)
 	# 			other_paulis_this_sample.append(sum(psi@psi[::-1].conj())/norm(psi)**2)
 
-	# 	#end for loop over cycles
+		#end for loop over cycles
 
 	# 	jumps.append(jumps_this_sample)
 	# 	well_imbalance.append(imbalance_this_sample)
 	# 	other_paulis.append(other_paulis_this_sample)
-	# #end for loop over samples
+	#end for loop over samples
 
 	# #Plot the well imbalance
 	# plt.figure()
