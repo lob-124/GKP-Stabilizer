@@ -3,6 +3,7 @@ from sys import path
 path.insert(0,"../Frederik/")
 
 from units import *
+from numpy import complex128
 
 
 def time_evolve(psi,H,t,dt,order=3):
@@ -28,7 +29,7 @@ def time_evolve(psi,H,t,dt,order=3):
         The wave function at time t+dt 
 	"""
 	_H = H(t)
-	psi_prime = psi
+	psi_prime = psi.astype(complex128)
 
 	dpsi = psi
 	for n in range(1,order+1):
