@@ -50,6 +50,52 @@ def f(E,t,W_ft,delta_t,gamma,temp,Lambda,omega_0=1):
     return val 
 
 
+def ff(E,t,W_ft,delta_t,gamma,temp,Lambda,omega_0=1):
+    """
+    
+    Return the scalar-valued function f appearing in the jump operators
+
+    Parameters
+    ----------
+    E: float
+        The energy argument
+    t: float
+        The time argument
+    W_ft: tuple of array(complex), array(float)
+        The Fourier components of the switching function W, and the frequencies
+    delta_t: float
+        The time window over which the switching function is non-zero
+    gamma: float
+        The system-bath coupling strength
+    temp: float
+        Effective temeprature of the bath
+    lambda: float
+        Decay length appearing in the bath spectral function
+    omega0: float, optional
+        Cutoff frequency in bath spectral function. Defaults to unity
+
+    Returns
+    -------
+    val : float
+        Value of jump-operator function f(E;t)
+    """
+    val = 0
+    for W_w,w in zip(*W_ft):
+        omega = E + w
+        if abs(omega) < 1e-14:
+            J = temp/omega_0
+        else:
+            S_0 = abs(omega)*exp(-(omega**2)/(2*Lambda**2))/omega_0
+            BE = (1)/(1-exp(-omega/temp))*sign(omega)
+            J = S_0 *BE
+
+        temp = abs(sqrt(2*pi*gamma*J)*W_w*exp(-1j*w*t + 1j*E*(t-delta_t)))
+        print(temp)
+        val += sqrt(2*pi*gamma*J)*W_w*exp(-1j*w*t + 1j*E*(t-delta_t))
+
+    return val 
+
+
 @jit(nopython=True)
 def L_tilde_energy_basis(X,t,energies,W_ft,delta_t,gamma,temp,Lambda,omega_0=1):
     """

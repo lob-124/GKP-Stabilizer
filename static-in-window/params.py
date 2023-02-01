@@ -7,7 +7,7 @@ from numpy import linspace
 
 
 nsamples = 1            # Number of samples in SSE simulation
-num_periods = 25#2000          # Number of cycles to include in simulation
+num_periods = 1000#2000          # Number of cycles to include in simulation
 D        = 1000        # Dimension of Hilbert space
 N_wells  = 10
 pvec     = linspace(-2,2,400)   # Momenta to smaple for wigner function
@@ -16,7 +16,7 @@ pvec     = linspace(-2,2,400)   # Momenta to smaple for wigner function
 N_trunc = 100
  
 omega_c  = 0.5*THz         # Bath cutoff frequency
-gamma    = 1.2e-3*meV      # Bare system-bath coupling. Translates to a resistance. 
+gamma    = 1e-3*meV#1.2e-3*meV      # Bare system-bath coupling. Translates to a resistance. 
 Temp     = 0.001#2e-3*Kelvin   # Bath temperature 
 omega0   = 1*meV         # Normalizing frequency that enters in ohmic spectral function
 

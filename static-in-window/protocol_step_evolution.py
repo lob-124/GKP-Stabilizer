@@ -16,10 +16,18 @@ from numpy import linspace,diag,cos,exp
 from numpy.random import rand
 
 import matplotlib.pyplot as plt
+from matplotlib.colors import LogNorm
 
 from time import perf_counter
 
 if __name__ == "__main__":
+	from sys import argv
+
+	if len(argv) != 2:
+		print("Usage: <outfile>")
+		exit(0)
+
+	outfile = argv[1]
 
 ## Shamelessly stolen from Frederik
 	# Derive physical quantities from parameters
@@ -70,6 +78,8 @@ if __name__ == "__main__":
 
 	#Diagonalize H_window (needed for computing jump operators)
 	E_window_full, V_window_full = eigh(H_window_full)
+
+	print(E_window_full)
 
 	#Truncate the Hilbert space to keep only the N_trunc lowest lying
 	#	energy levels
@@ -256,7 +266,7 @@ if __name__ == "__main__":
 	well_imbalance = []
 	other_paulis = []	#figure out from Frederik what this is
 	#rhos = []
-	#psis = []
+	psis = []
 	#wigners = []
 	for sample_num in range(nsamples):
 		#Keep track of jumps & imbalance for this sample
@@ -267,18 +277,18 @@ if __name__ == "__main__":
 		r = rand()	#Random number to compare norm of wavefunction to
 
 		psi = psi_0		#The current wavefunction, initialized to psi_0
-		norm_psi = []
+		weights = []
 		times = []
 		for i in range(num_periods):
 			if (i%5)==0:
 				print("Currently on cycle {} out of {}".format(i,num_periods))
-			t_begin = perf_counter() 
+			#t_begin = perf_counter() 
 			for t in t_vals:
+				weights.append(abs(psi)**2/norm(psi)**2)
+				times.append(i*T+t)
+
 				#Time evolve, employing the Taylor expansion method in integrate.py
 				psi = time_evolve(psi,H_eff,i*T+t,dt,order)
-
-				norm_psi.append(sum(abs(psi[-5:])**2/norm(psi)))
-				times.append(i*T+t)
 
 				#Check if there is a quantum jump, and proceed accordingly
 				if (1 - norm(psi)**2) > r:
@@ -303,25 +313,39 @@ if __name__ == "__main__":
 
 				#end jump if block
 			#end for loop over current cycle
-			t_end = perf_counter()
-			print("Time elapsed: {}".format(t_end-t_begin)) 
+			#t_end = perf_counter()
+			#print("Time elapsed: {}".format(t_end-t_begin)) 
 
-	# 		#Measure once only every oscillation period of the bare LC circuit 
-	# 		if (i % 4) == 0:
-	# 			imbalance_this_sample.append(sum(abs(psi)**2*well_projector)/norm(psi)**2)
-	# 			other_paulis_this_sample.append(sum(psi@psi[::-1].conj())/norm(psi)**2)
+			#Measure once only every oscillation period of the bare LC circuit 
+			# if (i % 4) == 0:
+			# 	psi_full = V_window @ psi 	#Convert back to phi basis
+			# 	print(psi_full.shape)
+			# 	imbalance_this_sample.append(sum(abs(psi_full)**2*well_projector)/norm(psi_full)**2)
+			# 	other_paulis_this_sample.append(sum(psi_full @ psi_full[::-1].conj())/norm(psi_full)**2)
 
 		#end for loop over cycles
+		save(outfile,[weights,times])
 		print(jumps_this_sample)
-		plt.plot(times,norm_psi)
-		plt.xlabel("Time t")
-		plt.ylabel("Weight in last five components")
+
+		weights = array(weights)
+
+		fig = plt.figure(figsize=(12,12))
+		im = plt.pcolormesh(times,list(range(N_trunc)),weights.T,norm=LogNorm(vmin=max(1e-15,weights.min()),vmax=weights.max()),cmap='hot')
+		plt.xlabel("Time "+r"$t$",size=15)
+		plt.ylabel("Eigenstate Number "+r"$i$",size=15)
+		plt.tick_params(which="both",labelsize=15)
+		cbar = fig.colorbar(im)
+		cbar.ax.tick_params(labelsize=15)
+		cbar.set_label(label=r'$|\langle\phi_i|\psi(t)\rangle|^2/||\psi(t)||^2$',size=20)
 		plt.show()
 
-	# 	jumps.append(jumps_this_sample)
-	# 	well_imbalance.append(imbalance_this_sample)
-	# 	other_paulis.append(other_paulis_this_sample)
+		# jumps.append(jumps_this_sample)
+		# well_imbalance.append(imbalance_this_sample)
+		# other_paulis.append(other_paulis_this_sample)
+		# psis.append(psi)
 	#end for loop over samples
+
+	#save(outfile,[jumps , well_imbalance, other_paulis, psis])
 
 	# #Plot the well imbalance
 	# plt.figure()

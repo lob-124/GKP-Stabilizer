@@ -39,37 +39,33 @@ def time_evolve(psi,H,t,dt,order=3):
 	return psi_prime
 
 
-#This method doesn't seem to work very well...
-def time_evolution(t1,t2,dt,H,order=1):
+def time_evolution(t1,dt,H,D,order=3):
 	"""
-	Computes the time-evolution operator U(t1,t2)
+	Computes the time-evolution operator U(t1,t1+dt)
 
 	Parameters
     ----------
     t1 : float
         The initial time
-    t2: float
-    	The end time
     dt: float
     	The time step 
     H: callable
     	Given a time t, H(t) returns the Hamiltonian at time t, expressed as a matrix 
+    D: int
+    	The Hilbert space dimension
 	order: int, optional
 		Order of approximation to compute to. Defaults to 1
 
     Returns
     -------
     U : ndarray
-        The time-evolution operator U(t1,t2) 
+        The time-evolution operator U(t1,t1+dt)
 	"""
-	t_vals = arange(t1,t2+dt/2,dt)
 
 	U = eye(D,dtype=complex128)
-	for t in t_vals:
-		for i in range(D):
-			U[:,i] = time_evolve(U[:,i],H,t,dt,order)
-		break
-
+	for i in range(D):
+		U[:,i] = time_evolve(U[:,i],H,t,dt,order)
+	
 	return U
 
 
