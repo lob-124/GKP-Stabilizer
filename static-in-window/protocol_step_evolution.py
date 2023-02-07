@@ -7,10 +7,10 @@ from basic import get_tmat
 
 #import jump_static as js
 import jump_static_optimized as js
-from integrate import time_evolve
+from integrate import time_evolution
 from params import *
 
-from numpy.linalg import eigh,norm
+from numpy.linalg import eigh,eigvals,norm
 from scipy.linalg import expm
 from numpy import linspace,diag,cos,exp
 from numpy.random import rand
@@ -78,8 +78,6 @@ if __name__ == "__main__":
 
 	#Diagonalize H_window (needed for computing jump operators)
 	E_window_full, V_window_full = eigh(H_window_full)
-
-	print(E_window_full)
 
 	#Truncate the Hilbert space to keep only the N_trunc lowest lying
 	#	energy levels
@@ -181,9 +179,6 @@ if __name__ == "__main__":
 
 	## EFFECTIVE HAMILTONIAN FOR SSE EVOLUTION ##
 
-	#The f function appearing in the jump operators
-	#f_func = js.f(B.J,(W_fourier,frequencies),dt_JJ,gamma)
-
 	#The system Hamiltonian (as a function of time)
 	def H_t(t,trunc=True):
 		if trunc:
@@ -215,38 +210,21 @@ if __name__ == "__main__":
 			U_dag = time_evo(t_proj,dt_JJ,dt_JJ)
 			U = U_dag.conj().T
 
-		#print("doing the thing")
-		#L_1 = U @ js.L_tilde_energy_basis(X1,f_func,t_proj,E0) @ U_dag
-		#print("doing the second thing")
-		#L_2 = U @ js.L_tilde_energy_basis(X2,f_func,t_proj,E0) @ U_dag
-
 		L_1 = U @ js.L_tilde_energy_basis(X1_E,t_proj,E_window,(W_fourier,frequencies),dt_JJ,gamma,Temp,omega_c,omega0) @ U_dag
 		L_2 = U @ js.L_tilde_energy_basis(X2_E,t_proj,E_window,(W_fourier,frequencies),dt_JJ,gamma,Temp,omega_c,omega0) @ U_dag
 
 		return L_1,L_2
 
-	# _t1 = perf_counter() 
-	# jump_ops(T/2)
-	# _t2 = perf_counter()
-	# print("Time elapsed: {} seconds".format(_t2-_t1))
-
-	# _t1 = perf_counter() 
-	# jump_ops(T/2)
-	# _t2 = perf_counter()
-	# print("Time elapsed: {} seconds".format(_t2-_t1))
-
-	# _t1 = perf_counter() 
-	# L_1,L_2 = jump_ops(T/2)
-	# _t2 = perf_counter()
-	# print("Time elapsed: {} seconds".format(_t2-_t1))
-
-	# print(L_1.shape)
-
 
 	#Compute the effective Hamiltonian governing SSE Evolution
-	def H_eff(t):
+	def H_eff(t,return_jump_ops=False):
 		L_1 , L_2 = jump_ops(t)
-		return H_t(t) - (1j*hbar/2)*gamma*(L_1.conj().T @ L_1 + L_2.conj().T @ L_2)
+		_H = H_t(t) - (1j*hbar/2)*gamma*(L_1.conj().T @ L_1 + L_2.conj().T @ L_2)
+
+		if return_jump_ops:		#Option to return jump operators as well
+			return _H , L_1, L_2
+		else: 
+			return _H
 
 
 
@@ -259,93 +237,187 @@ if __name__ == "__main__":
 	psi_0[1] = 1/sqrt(2) 
 
 	#time values within each driving period
-	t_vals = arange(0,T+dt/2,dt)
+	#t_vals = arange(0,T+dt/2,dt)
+	t_vals = linspace(0,T,num=N_steps+1)
+	dt = t_vals[1] - t_vals[0]
+
+
+	#Compute the time evolution operators U_eff(0,t) for each t in t_vals for evolution
+	#	according to H_eff
+	#We'll use U_eff(0,T) to compute the evolution over each driving period, and
+	#	all the other to do binary search within the period when a jump occurrs
+	t1 = perf_counter()
+	U_current = eye(N_trunc,dtype=complex128)
+	U_inv_current = eye(N_trunc,dtype=complex128)
+	U_ops = {0:U_current}	#Include the identity at t=0 (useful later)
+	U_inv_ops = {0:U_inv_current}	#Store also the inverse evolution U_eff(t,0)
+	L_ops = {}
+	for i in range(N_steps+1):
+		_H , _L1, _L2 = H_eff(t_vals[i],return_jump_ops=True)
+
+		#Use H_eff(t) to compute U_eff(t,t+dt) & concatenate it to U_eff(0,t)
+		if i != N_steps:
+			U_current = time_evolution(dt,_H,order=order) @ U_current
+			U_ops[i+1] = U_current
+		#Use H_eff(t) to compute U_eff(t,t-dt) & concatenate it to U_eff(t-dt,0)
+		if i != 0:
+			U_inv_current = time_evolution(-dt,_H,order=order) @ U_inv_current
+			U_inv_ops[i] = U_inv_current
+			
+		L_ops[i] = (_L1 , _L2)	#Store the jump operators as well!
+	#end loop over driving period
+
+	L_ops[N_steps] = L_ops[0]	#Store the jump operators at t=T (useful later)
+
+	t2 = perf_counter()
+	print("Time taken: {} seconds".format(t2-t1))
+
+	U_T = U_ops[N_steps]		#The evolution operator over a full period
+
+	max_eval = 0.0
+	for i in range(N_steps+1):
+		eigenvalues_1 = eigvals(L_ops[i][0].conj().T @ L_ops[i][0])
+		eigenvalues_2 = eigvals(L_ops[i][1].conj().T @ L_ops[i][0])
+
+		max_eval = max(max(abs(eigenvalues_1)) + max(abs(eigenvalues_2)),max_eval)
+
+	print(max_eval*dt_JJ/hbar)
+
 
 	
 	jumps = []
 	well_imbalance = []
-	other_paulis = []	#figure out from Frederik what this is
-	#rhos = []
+	# other_paulis = []	#figure out from Frederik what this is
+	# #rhos = []
+	weights = []
 	psis = []
-	#wigners = []
+	# #wigners = []
 	for sample_num in range(nsamples):
 		#Keep track of jumps & imbalance for this sample
 		jumps_this_sample = []
 		imbalance_this_sample = []
 		other_paulis_this_sample = []
+		weights_this_sample = []
 
 		r = rand()	#Random number to compare norm of wavefunction to
+		#print("Starting r: {}".format(r))
 
 		psi = psi_0		#The current wavefunction, initialized to psi_0
-		weights = []
 		times = []
+		# t1 = perf_counter()
 		for i in range(num_periods):
-			if (i%5)==0:
-				print("Currently on cycle {} out of {}".format(i,num_periods))
-			#t_begin = perf_counter() 
-			for t in t_vals:
-				weights.append(abs(psi)**2/norm(psi)**2)
-				times.append(i*T+t)
+			#print("******** New cycle ********")
+			# if (i%5)==0:
+			# 	print("Currently on cycle {} out of {}".format(i,num_periods))
+			# #t_begin = perf_counter() 
+			
+			start_index = 0
+			ind_left = 0
+			ind_right = N_steps
 
-				#Time evolve, employing the Taylor expansion method in integrate.py
-				psi = time_evolve(psi,H_eff,i*T+t,dt,order)
+			psi_new = U_T @ psi 	#Evolve by a full period 
 
-				#Check if there is a quantum jump, and proceed accordingly
-				if (1 - norm(psi)**2) > r:
-					jump_time = i*T+t-dt/2	#Estimate time of jump as t-dt/2
+			#Check if there was a quantum jump within this period
+			while (1 - norm(psi_new)**2) > r:
+			#	print("-------- JUMP DETECTED --------")
 
-					#Get jump operators at this time
-					L_1 , L_2 = jump_ops(jump_time)	
+				#Binary search for the time at which the jump occurred
+				while (ind_right-ind_left) > 1:
+					ind_mid = round((ind_right+ind_left)/2)
+			#		print("Middle Index: {0}/{1}".format(ind_mid,N_steps),end="\n\t")
 
-					#Determine the type of jump, and jump the wavefunction accordingly
-					p_1 = norm(L_1 @ psi)**2
-					p_2 = norm(L_2 @ psi)**2
-					if rand() < p_1/(p_1+p_2):
-						jumps_this_sample.append((1,jump_time))
-						psi = L_1 @ psi
+					if start_index != 0:
+						#If we've had a previous jump within this period, we evolve from
+						#	the time of the previous jump - NOT the start of the period!
+						psi_temp = U_ops[ind_mid] @ U_inv_ops[start_index] @ psi
 					else:
-						jumps_this_sample.append((2,jump_time))
-						psi = L_2 @ psi
+						psi_temp = U_ops[ind_mid] @ psi
 
-					#In either case, re-normalize the wavefunction and re-set the random variable r
-					psi = psi/norm(psi)
-					r = rand()
+			#		print(1-norm(psi_temp)**2)
+					if (1-norm(psi_temp)**2) >= r:
+						ind_right = ind_mid
+					else:
+						ind_left = ind_mid
 
-				#end jump if block
-			#end for loop over current cycle
-			#t_end = perf_counter()
-			#print("Time elapsed: {}".format(t_end-t_begin)) 
+				#We've now found the time at which the jump ocurred
+				ind = round((ind_right+ind_left)/2)
+				jump_time = i*T + t_vals[ind]
+
+				psi = U_ops[ind] @ psi 		#Update psi accordingly
+
+				#Get jump operators at this time
+				L_1 , L_2 = L_ops[ind]	
+
+				#Determine the type of jump, and jump the wavefunction accordingly
+				p_1 = norm(L_1 @ psi)**2
+				p_2 = norm(L_2 @ psi)**2
+				if rand() < p_1/(p_1+p_2):
+					jumps_this_sample.append((1,jump_time))
+					psi = L_1 @ psi
+				else:
+					jumps_this_sample.append((2,jump_time))
+					psi = L_2 @ psi
+
+				#In either case, re-normalize the wavefunction and re-set the random variable r
+				psi = psi/norm(psi)
+				r = rand()
+			#	print("\t"+"New r : {}".format(r))
+
+				#Evolve to the end of the period (NOW from the jump time!!), reset the binary search
+				#	markers, and rinse/repeat (if necessary)
+				psi_new = U_T @ U_inv_ops[ind] @ psi 	#Use inverse evolution to make U(t,T)
+				start_index  = ind 	#Update start_index to mark the time of the previous jump
+				ind_left = ind 
+				ind_right = N_steps
+
+			#end jump while block
+
+			#We've reached the end of this driving period. Update the wavefunction accordingly
+			psi = psi_new
+			weights_this_sample.append(abs(psi)**2/norm(psi)**2)
+
+	# 		#t_end = perf_counter()
+	# 		#print("Time elapsed: {}".format(t_end-t_begin)) 
 
 			#Measure once only every oscillation period of the bare LC circuit 
-			# if (i % 4) == 0:
-			# 	psi_full = V_window @ psi 	#Convert back to phi basis
-			# 	print(psi_full.shape)
-			# 	imbalance_this_sample.append(sum(abs(psi_full)**2*well_projector)/norm(psi_full)**2)
-			# 	other_paulis_this_sample.append(sum(psi_full @ psi_full[::-1].conj())/norm(psi_full)**2)
-
+			if ((i+1) % 4) == 0:
+			 	psi_full = V_window @ psi 	#Convert back to phi basis
+			 	imbalance_this_sample.append(sum(abs(psi_full)**2*well_projector)/norm(psi_full)**2)
+			 	#other_paulis_this_sample.append(sum(psi_full @ psi_full[::-1].conj())/norm(psi_full)**2)
+		
 		#end for loop over cycles
-		save(outfile,[weights,times])
-		print(jumps_this_sample)
+		# t2 = perf_counter()
+		# print("Time elapsed: {} seconds".format(t2-t1))
+		#weights.append(weights_this_sample)
 
-		weights = array(weights)
+	 	#end for loop over cycles
+		jumps.append(jumps_this_sample)
+		psis.append(psi)
+		weights.append(weights_this_sample)
+		well_imbalance.append(imbalance_this_sample)
 
-		fig = plt.figure(figsize=(12,12))
-		im = plt.pcolormesh(times,list(range(N_trunc)),weights.T,norm=LogNorm(vmin=max(1e-15,weights.min()),vmax=weights.max()),cmap='hot')
-		plt.xlabel("Time "+r"$t$",size=15)
-		plt.ylabel("Eigenstate Number "+r"$i$",size=15)
-		plt.tick_params(which="both",labelsize=15)
-		cbar = fig.colorbar(im)
-		cbar.ax.tick_params(labelsize=15)
-		cbar.set_label(label=r'$|\langle\phi_i|\psi(t)\rangle|^2/||\psi(t)||^2$',size=20)
-		plt.show()
+	save(outfile,[jumps,psis,weights,well_imbalance])
+	# 	print(jumps_this_sample)
 
-		# jumps.append(jumps_this_sample)
-		# well_imbalance.append(imbalance_this_sample)
-		# other_paulis.append(other_paulis_this_sample)
-		# psis.append(psi)
-	#end for loop over samples
+	# 	weights = array(weights)
 
-	#save(outfile,[jumps , well_imbalance, other_paulis, psis])
+	# 	fig = plt.figure(figsize=(12,12))
+	# 	im = plt.pcolormesh(times,list(range(N_trunc)),weights.T,norm=LogNorm(vmin=max(1e-15,weights.min()),vmax=weights.max()),cmap='hot')
+	# 	plt.xlabel("Time "+r"$t$",size=15)
+	# 	plt.ylabel("Eigenstate Number "+r"$i$",size=15)
+	# 	plt.tick_params(which="both",labelsize=15)
+	# 	cbar = fig.colorbar(im)
+	# 	cbar.ax.tick_params(labelsize=15)
+	# 	cbar.set_label(label=r'$|\langle\phi_i|\psi(t)\rangle|^2/||\psi(t)||^2$',size=20)
+	# 	plt.show()
+
+	# 	jumps.append(jumps_this_sample)
+	# 	well_imbalance.append(imbalance_this_sample)
+	# 	#other_paulis.append(other_paulis_this_sample)
+	# 	psis.append(psi)
+	# #end for loop over samples
+
+	# save(outfile,[jumps , well_imbalance, psis])
 
 	# #Plot the well imbalance
 	# plt.figure()

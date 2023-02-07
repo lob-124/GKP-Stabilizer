@@ -39,9 +39,39 @@ def time_evolve(psi,H,t,dt,order=3):
 	return psi_prime
 
 
-def time_evolution(t1,dt,H,D,order=3):
+def time_evolve(psi,H,dt,order=3):
 	"""
-	Computes the time-evolution operator U(t1,t1+dt)
+	Computes the time-evolution psi(t) -> psi(t+dt)
+
+	Parameters
+    ----------
+    psi : array
+        The wavefunction at time t 
+    H: ndarray
+    	The Hamiltonian H(t) at time t, expressed as a matrix 
+	dt: float
+		Timestep to evolve by 
+	order: int, optional
+		Order of approximation to compute to. Defaults to 3
+
+    Returns
+    -------
+    psi_prime : array
+        The wave function at time t+dt 
+	"""
+	psi_prime = psi.astype(complex128)
+
+	dpsi = psi
+	for n in range(1,order+1):
+		dpsi = (-1j*dt/(n*hbar))*(H @ dpsi)
+		psi_prime += dpsi
+
+	return psi_prime
+
+
+def time_evolution(t,dt,H,order=3):
+	"""
+	Computes the time-evolution operator U(t,t1+dt)
 
 	Parameters
     ----------
@@ -51,10 +81,35 @@ def time_evolution(t1,dt,H,D,order=3):
     	The time step 
     H: callable
     	Given a time t, H(t) returns the Hamiltonian at time t, expressed as a matrix 
-    D: int
-    	The Hilbert space dimension
 	order: int, optional
-		Order of approximation to compute to. Defaults to 1
+		Order of approximation to compute to. Defaults to 3
+
+    Returns
+    -------
+    U : ndarray
+        The time-evolution operator U(t1,t1+dt)
+	"""
+	_H = H(t)
+
+	U = eye(_H.shape[0],dtype=complex128)
+	for i in range(_H.shape[0]):
+		U[:,i] = time_evolve(U[:,i],_H,dt,order)
+	
+	return U
+
+
+def time_evolution(dt,H,order=3):
+	"""
+	Computes the time-evolution operator U(t,t+dt)
+
+	Parameters
+    ----------
+    dt: float
+    	The time step 
+    H: ndarray
+    	The Hamiltonian at H(t) at time t, expressed as a matrix 
+	order: int, optional
+		Order of approximation to compute to. Defaults to 3
 
     Returns
     -------
@@ -62,9 +117,9 @@ def time_evolution(t1,dt,H,D,order=3):
         The time-evolution operator U(t1,t1+dt)
 	"""
 
-	U = eye(D,dtype=complex128)
-	for i in range(D):
-		U[:,i] = time_evolve(U[:,i],H,t,dt,order)
+	U = eye(H.shape[0],dtype=complex128)
+	for i in range(H.shape[0]):
+		U[:,i] = time_evolve(U[:,i],H,dt,order)
 	
 	return U
 
