@@ -13,10 +13,10 @@ N_wells  = 10
 pvec     = linspace(-2,2,400)   # Momenta to smaple for wigner function
 
 #Number of eigenvectors in Hilbert space to keep
-N_trunc = 200
+N_trunc = 100
  
 omega_c  = 0.5*THz         # Bath cutoff frequency
-gamma    = 1e-3*meV#1.2e-3*meV      # Bare system-bath coupling. Translates to a resistance. 
+gamma    = 1e-6*meV#1.2e-3*meV      # Bare system-bath coupling. Translates to a resistance. 
 Temp     = 0.001*Kelvin#2e-3*Kelvin   # Bath temperature 
 omega0   = 1*meV         # Normalizing frequency that enters in ohmic spectral function
 
@@ -31,7 +31,7 @@ Tc = 2*pi/cavity_frequency
 #dt_0 = Tc/4*0.972	#What was this?
 #T = Tc/4+dt_JJ	#Why was this here?
 T = Tc/4
-dt_JJ = .1*T#.2*T
+dt_JJ = .05*T#.2*T
 Omega = 2*pi/T
 
 #Number of timesteps per driving period and order for numerical integration
@@ -39,14 +39,14 @@ Omega = 2*pi/T
 N_binary = 9
 N_steps = 2**N_binary
 #dt = .005*T
-order = 5
+order = -1
 
 
 quantization_parameter  = 1.0
 
 #Frequency to truncate fourier expansion of switching function at
 #	Assumes omega_q = 2*pi*q/T
-q_max = 250  
+q_max = 450 
 
 #Center and decay length of Gassian switching function
 #	Assumes W(t) = exp(-((t-t_0)/tau)^2)

@@ -7,12 +7,12 @@ from basic import get_tmat
 
 #import jump_static as js
 import jump_static_optimized as js
-from integrate import time_evolution
+from integrate import time_evolution, find_order
 from params import *
 
 from numpy.linalg import eigh,eigvals,norm
 from scipy.linalg import expm
-from numpy import linspace,diag,cos,exp
+from numpy import linspace,diag,cos,exp,around,log2
 from numpy.random import rand
 
 import matplotlib.pyplot as plt
@@ -219,7 +219,7 @@ if __name__ == "__main__":
 	#Compute the effective Hamiltonian governing SSE Evolution
 	def H_eff(t,return_jump_ops=False):
 		L_1 , L_2 = jump_ops(t)
-		_H = H_t(t) - (1j*hbar/2)*gamma*(L_1.conj().T @ L_1 + L_2.conj().T @ L_2)
+		_H = H_t(t) - (1j*hbar/2)*(L_1.conj().T @ L_1 + L_2.conj().T @ L_2)
 
 		if return_jump_ops:		#Option to return jump operators as well
 			return _H , L_1, L_2
@@ -240,48 +240,92 @@ if __name__ == "__main__":
 	#t_vals = arange(0,T+dt/2,dt)
 	t_vals = linspace(0,T,num=N_steps+1)
 	dt = t_vals[1] - t_vals[0]
+	print(dt)
 
 
-	#Compute the time evolution operators U_eff(0,t) for each t in t_vals for evolution
+	# trials = 10
+	# _H = H_eff(t_vals[N_steps//2])
+	# t1 = perf_counter()
+	# for i in range(trials):
+	# 	time_evolution(dt,_H,order=-1)
+	# t2 = perf_counter()
+	# t_expm = (t2-t1)/trials
+
+	# n_max = 50
+	# t_ns = []
+	# for n in range(1,n_max+1):
+	# 	print(n)
+	# 	t1 = perf_counter()
+	# 	for i in range(trials):
+	# 		time_evolution(dt,_H,order=n)
+	# 	t2 = perf_counter()
+	# 	t_ns.append((t2-t1)/trials)
+
+	# plt.figure(figsize=(10,8))
+	# plt.plot(list(range(1,n_max+1)),t_ns)
+	# plt.hlines(t_expm,1,n_max,colors="k",linestyles="dashed")
+
+	# plt.xlabel(r"Order $n$",size=20)
+	# plt.ylabel(r"Average time to compute ($s$)",size=20)
+	# plt.tick_params(which="both",labelsize=15)
+
+	# plt.show()
+
+	#Compute the time evolution operators U_eff(0,t) & U_eff(t,T) for each t in t_vals for evolution
 	#	according to H_eff
 	#We'll use U_eff(0,T) to compute the evolution over each driving period, and
-	#	all the other to do binary search within the period when a jump occurrs
-	t1 = perf_counter()
+	#	all the other U(0,t) to do binary search within the period when a jump occurrs.
+	#After finding the jump location, we use U(t,T) to evolve to the end of the period and check for another jump
 	U_current = eye(N_trunc,dtype=complex128)
-	U_inv_current = eye(N_trunc,dtype=complex128)
-	U_ops = {0:U_current}	#Include the identity at t=0 (useful later)
-	U_inv_ops = {0:U_inv_current}	#Store also the inverse evolution U_eff(t,0)
+	dU = {}
+	U_0_to_t = {0:U_current}	#Include the identity at t=0 (useful later)
+	U_t_to_T = {N_steps:U_current}	#Store also the evolution U_eff(t,T)
 	L_ops = {}
-	for i in range(N_steps+1):
+
+	t1 = perf_counter()
+	for i in range(0,N_steps):
+		# if i%10 == 0:
+		# 	print("Currently on  {} of {}".format(i,N_steps))
 		_H , _L1, _L2 = H_eff(t_vals[i],return_jump_ops=True)
 
+		dt_found = find_timestep(_H,order,dt)
+
+		if dt_found < dt:
+			#Handle the case that we had to dynamically decrease the timestep
+			exponent = int(around(log2(dt/dt_found)))
+
 		#Use H_eff(t) to compute U_eff(t,t+dt) & concatenate it to U_eff(0,t)
-		if i != N_steps:
-			U_current = time_evolution(dt,_H,order=order) @ U_current
-			U_ops[i+1] = U_current
-		#Use H_eff(t) to compute U_eff(t,t-dt) & concatenate it to U_eff(t-dt,0)
-		if i != 0:
-			U_inv_current = time_evolution(-dt,_H,order=order) @ U_inv_current
-			U_inv_ops[i] = U_inv_current
+		dU[i] = time_evolution(dt,_H,order=order)
+		U_current = dU[i] @ U_current
+		U_0_to_t[i+1] = U_current
 			
 		L_ops[i] = (_L1 , _L2)	#Store the jump operators as well!
 	#end loop over driving period
 
+	#Now construct the evolution operators U_eff(t,T)
+	for i in range(N_steps-1,-1,-1):  
+		# if i%10 == 0:
+		# 	print("Currently on  {} of {}".format(i,N_steps))
+		U_t_to_T[i] = U_t_to_T[i+1] @ dU[i]
+
+
 	L_ops[N_steps] = L_ops[0]	#Store the jump operators at t=T (useful later)
+	U_T = U_0_to_t[N_steps]		#The evolution operator over a full period
 
 	t2 = perf_counter()
 	print("Time taken: {} seconds".format(t2-t1))
 
-	U_T = U_ops[N_steps]		#The evolution operator over a full period
 
-	max_eval = 0.0
-	for i in range(N_steps+1):
-		eigenvalues_1 = eigvals(L_ops[i][0].conj().T @ L_ops[i][0])
-		eigenvalues_2 = eigvals(L_ops[i][1].conj().T @ L_ops[i][0])
+	print(abs(U_T).max())
 
-		max_eval = max(max(abs(eigenvalues_1)) + max(abs(eigenvalues_2)),max_eval)
+	# max_eval = 0.0
+	# for i in range(N_steps+1):
+	# 	eigenvalues_1 = eigvals(L_ops[i][0].conj().T @ L_ops[i][0])
+	# 	eigenvalues_2 = eigvals(L_ops[i][1].conj().T @ L_ops[i][0])
 
-	print(max_eval*dt_JJ/hbar)
+	# 	max_eval = max(max(abs(eigenvalues_1)) + max(abs(eigenvalues_2)),max_eval)
+
+	# print(max_eval*dt_JJ/hbar)
 
 
 	
@@ -300,40 +344,38 @@ if __name__ == "__main__":
 		weights_this_sample = []
 
 		r = rand()	#Random number to compare norm of wavefunction to
-		#print("Starting r: {}".format(r))
+		print("Starting r: {}".format(r))
 
 		psi = psi_0		#The current wavefunction, initialized to psi_0
 		times = []
-		# t1 = perf_counter()
+		
 		for i in range(num_periods):
-			#print("******** New cycle ********")
-			# if (i%5)==0:
-			# 	print("Currently on cycle {} out of {}".format(i,num_periods))
-			# #t_begin = perf_counter() 
-			
-			start_index = 0
-			ind_left = 0
-			ind_right = N_steps
+						
+			#Indices used by binary search within period
+			start_index = 0			#time of previous jump
+			ind_left = 0			#left endpoint of current search interval
+			ind_right = N_steps 	#right endpoint of current search interval
 
 			psi_new = U_T @ psi 	#Evolve by a full period 
 
 			#Check if there was a quantum jump within this period
 			while (1 - norm(psi_new)**2) > r:
-			#	print("-------- JUMP DETECTED --------")
+				print("-------- JUMP DETECTED --------")
 
 				#Binary search for the time at which the jump occurred
 				while (ind_right-ind_left) > 1:
 					ind_mid = round((ind_right+ind_left)/2)
-			#		print("Middle Index: {0}/{1}".format(ind_mid,N_steps),end="\n\t")
-
+			
 					if start_index != 0:
 						#If we've had a previous jump within this period, we evolve from
 						#	the time of the previous jump - NOT the start of the period!
-						psi_temp = U_ops[ind_mid] @ U_inv_ops[start_index] @ psi
+						#NB: "psi" is the wavefunction at the previous jump time (see ****)
+						psi_temp=psi
+						for index in range(start_index,ind_mid):
+							psi_temp = dU[index] @ psi_temp
 					else:
-						psi_temp = U_ops[ind_mid] @ psi
+						psi_temp = U_0_to_t[ind_mid] @ psi
 
-			#		print(1-norm(psi_temp)**2)
 					if (1-norm(psi_temp)**2) >= r:
 						ind_right = ind_mid
 					else:
@@ -341,12 +383,20 @@ if __name__ == "__main__":
 
 				#We've now found the time at which the jump ocurred
 				ind = round((ind_right+ind_left)/2)
+				print("Jump index: {} of {}".format(ind,N_steps))
 				jump_time = i*T + t_vals[ind]
 
-				psi = U_ops[ind] @ psi 		#Update psi accordingly
+				#Advance psi to time t (****)
+				if start_index != 0:
+					#Evolve from prior jump (if there was one)
+					for index in range(start_index,ind):
+						psi = dU[index] @ psi
+				else:
+					#Otherwise, evolve from beginning of period
+					psi = U_0_to_t[ind] @ psi 	
 
-				#Get jump operators at this time
-				L_1 , L_2 = L_ops[ind]	
+				#Jump operators at time t
+				L_1 , L_2 = L_ops[ind]
 
 				#Determine the type of jump, and jump the wavefunction accordingly
 				p_1 = norm(L_1 @ psi)**2
@@ -359,23 +409,26 @@ if __name__ == "__main__":
 					psi = L_2 @ psi
 
 				#In either case, re-normalize the wavefunction and re-set the random variable r
+				print("Norm before normalization: {}".format(norm(psi)))
 				psi = psi/norm(psi)
+				print("Norm after normalization: {}".format(norm(psi)))
 				r = rand()
-			#	print("\t"+"New r : {}".format(r))
-
+				print("\t"+"New r : {}".format(r))
+			
 				#Evolve to the end of the period (NOW from the jump time!!), reset the binary search
 				#	markers, and rinse/repeat (if necessary)
-				psi_new = U_T @ U_inv_ops[ind] @ psi 	#Use inverse evolution to make U(t,T)
-				start_index  = ind 	#Update start_index to mark the time of the previous jump
+				psi_new = U_t_to_T[ind] @ psi 	
+				print("Norm after evolution to end of period: {}".format(norm(psi_new)))
+				start_index  = ind 	#Update start_index to mark the time of this jump
 				ind_left = ind 
 				ind_right = N_steps
 
 			#end jump while block
 
-			#We've reached the end of this driving period. Update the wavefunction accordingly
+			#We've reached the end of this driving period. Update "psi" accordingly
 			psi = psi_new
 			weights_this_sample.append(abs(psi)**2/norm(psi)**2)
-
+			
 	# 		#t_end = perf_counter()
 	# 		#print("Time elapsed: {}".format(t_end-t_begin)) 
 

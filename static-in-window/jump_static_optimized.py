@@ -45,7 +45,7 @@ def f(E,t,W_ft,delta_t,gamma,temp,Lambda,omega_0=1):
             BE = (1)/(1-exp(-omega/temp))*sign(omega)
             J = S_0 *BE
 
-        val += sqrt(2*pi*gamma*J)*W_w*exp(-1j*w*t + 1j*E*(t-delta_t))
+        val += sqrt(2*pi*gamma*J)*W_w*exp(-1j*w*t - 1j*E*(t-delta_t))   
 
     return val 
 
@@ -142,11 +142,31 @@ def L_tilde_energy_basis(X,t,energies,W_ft,delta_t,gamma,temp,Lambda,omega_0=1):
 
 
 if __name__ =="__main__":
-    from numpy import array
+    from numpy import array,exp,pi,sqrt,complex128
 
     X = array([[0.0,1.0],[1.0,0.0]],dtype=complex128)
     energies = [1.0,2.0]
+    W_ft = ([1.0,1.0,1.0],[-1.0,0.0,1.0])
 
-    print(f(1.0,0.2,([2.0,3.0],[1.0,2.0]),.05,0.5,1.0,1.0))
-    print(f(2.0,0.2,([2.0,3.0],[1.0,2.0]),.05,0.5,1.0,1.0))
-    print(L_tilde_energy_basis(X,0.2,energies,([2.0,3.0],[1.0,2.0]),.05,0.5,1.0,1.0))
+    delta_t = 0.1
+    omega0 = 1.0
+    gamma = 1.0
+    temp = 1.0
+    Lambda = 1.0
+
+
+    J_0 = 1.0
+    J_1 = exp(-0.5)/(1-exp(-1))
+    J_2 = 2*exp(-2)/(1-exp(-2))
+    J_m1 = exp(-0.5)/(exp(1)-1)
+    J_m2 = 2*exp(-2)/(exp(2)-1)
+
+    t_vals = [0.0,0.1,0.2,0.5,1.0]
+    for t in t_vals:
+        print("t = {}".format(t))
+        L_12 = exp(1j*(delta_t-t))*(sqrt(2*pi*J_1)+sqrt(2*pi*J_2)*exp(-1j*t)+sqrt(2*pi*J_0)*exp(1j*t))
+        print("\tL_12 expected: {}".format(L_12))
+        L_21 = exp(-1j*(delta_t-t))*(sqrt(2*pi*J_m1)+sqrt(2*pi*J_0)*exp(-1j*t)+sqrt(2*pi*J_m2)*exp(1j*t))
+        print("\tL_21 expected: {}".format(L_21))
+
+        print(L_tilde_energy_basis(X,t,energies,W_ft,delta_t,gamma,temp,Lambda,omega_0=omega0))
