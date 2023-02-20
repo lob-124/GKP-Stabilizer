@@ -228,7 +228,6 @@ if __name__ == "__main__":
 
 
 
-
 	# ## SSE EVOLUTION ##
 
 	#Initial wavefunction 
@@ -243,34 +242,6 @@ if __name__ == "__main__":
 	print(dt)
 
 
-	# trials = 10
-	# _H = H_eff(t_vals[N_steps//2])
-	# t1 = perf_counter()
-	# for i in range(trials):
-	# 	time_evolution(dt,_H,order=-1)
-	# t2 = perf_counter()
-	# t_expm = (t2-t1)/trials
-
-	# n_max = 50
-	# t_ns = []
-	# for n in range(1,n_max+1):
-	# 	print(n)
-	# 	t1 = perf_counter()
-	# 	for i in range(trials):
-	# 		time_evolution(dt,_H,order=n)
-	# 	t2 = perf_counter()
-	# 	t_ns.append((t2-t1)/trials)
-
-	# plt.figure(figsize=(10,8))
-	# plt.plot(list(range(1,n_max+1)),t_ns)
-	# plt.hlines(t_expm,1,n_max,colors="k",linestyles="dashed")
-
-	# plt.xlabel(r"Order $n$",size=20)
-	# plt.ylabel(r"Average time to compute ($s$)",size=20)
-	# plt.tick_params(which="both",labelsize=15)
-
-	# plt.show()
-
 	#Compute the time evolution operators U_eff(0,t) & U_eff(t,T) for each t in t_vals for evolution
 	#	according to H_eff
 	#We'll use U_eff(0,T) to compute the evolution over each driving period, and
@@ -282,31 +253,42 @@ if __name__ == "__main__":
 	U_t_to_T = {N_steps:U_current}	#Store also the evolution U_eff(t,T)
 	L_ops = {}
 
+	max_exponent = 0
 	t1 = perf_counter()
 	for i in range(0,N_steps):
-		# if i%10 == 0:
-		# 	print("Currently on  {} of {}".format(i,N_steps))
 		_H , _L1, _L2 = H_eff(t_vals[i],return_jump_ops=True)
 
 		dt_found = find_timestep(_H,order,dt)
 
 		if dt_found < dt:
 			#Handle the case that we had to dynamically decrease the timestep
+			#We build up U(t,t+dt) by computing the intermediate steps
 			exponent = int(around(log2(dt/dt_found)))
+			max_exponent = max(max_exponent,exponent)
+			step = 2**(-exponent)
 
-		#Use H_eff(t) to compute U_eff(t,t+dt) & concatenate it to U_eff(0,t)
-		dU[i] = time_evolution(dt,_H,order=order)
-		U_current = dU[i] @ U_current
-		U_0_to_t[i+1] = U_current
+			_dU = time_evolution(dt_found,_H,order=order)
+			for j in range(1,2**exponent):
+				_H = H_eff(t_vals[i]+j*step,return_jump_ops=False)
+				_dU = time_evolution(dt_found,_H,order=order) @ _dU
+
+			dU[i] = _dU
+			U_current = dU[i] @ U_current
+			U_0_to_t[i+1] = U_current
+				
+		else:
+			#Use H_eff(t) to compute U_eff(t,t+dt) & concatenate it to U_eff(0,t)
+			dU[i] = time_evolution(dt,_H,order=order)
+			U_current = dU[i] @ U_current
+			U_0_to_t[i+1] = U_current
 			
-		L_ops[i] = (_L1 , _L2)	#Store the jump operators as well!
+			L_ops[i] = (_L1 , _L2)	#Store the jump operators as well!
 	#end loop over driving period
 
 	#Now construct the evolution operators U_eff(t,T)
-	for i in range(N_steps-1,-1,-1):  
-		# if i%10 == 0:
-		# 	print("Currently on  {} of {}".format(i,N_steps))
-		U_t_to_T[i] = U_t_to_T[i+1] @ dU[i]
+	indices = list(reverse(U_0_to_t))
+	for i in range(1,len(indices)):  
+		U_t_to_T[indices[i]] = U_t_to_T[indices[i-1]] @ dU[indices[i]]
 
 
 	L_ops[N_steps] = L_ops[0]	#Store the jump operators at t=T (useful later)
@@ -316,19 +298,7 @@ if __name__ == "__main__":
 	print("Time taken: {} seconds".format(t2-t1))
 
 
-	print(abs(U_T).max())
 
-	# max_eval = 0.0
-	# for i in range(N_steps+1):
-	# 	eigenvalues_1 = eigvals(L_ops[i][0].conj().T @ L_ops[i][0])
-	# 	eigenvalues_2 = eigvals(L_ops[i][1].conj().T @ L_ops[i][0])
-
-	# 	max_eval = max(max(abs(eigenvalues_1)) + max(abs(eigenvalues_2)),max_eval)
-
-	# print(max_eval*dt_JJ/hbar)
-
-
-	
 	jumps = []
 	well_imbalance = []
 	# other_paulis = []	#figure out from Frederik what this is
@@ -363,9 +333,10 @@ if __name__ == "__main__":
 				print("-------- JUMP DETECTED --------")
 
 				#Binary search for the time at which the jump occurred
-				while (ind_right-ind_left) > 1:
+				while (ind_right - ind_left) > 1:
 					ind_mid = round((ind_right+ind_left)/2)
-			
+					
+
 					if start_index != 0:
 						#If we've had a previous jump within this period, we evolve from
 						#	the time of the previous jump - NOT the start of the period!
@@ -384,7 +355,7 @@ if __name__ == "__main__":
 				#We've now found the time at which the jump ocurred
 				ind = round((ind_right+ind_left)/2)
 				print("Jump index: {} of {}".format(ind,N_steps))
-				jump_time = i*T + t_vals[ind]
+				jump_time = i*T + dt*ind
 
 				#Advance psi to time t (****)
 				if start_index != 0:
@@ -450,43 +421,3 @@ if __name__ == "__main__":
 		well_imbalance.append(imbalance_this_sample)
 
 	save(outfile,[jumps,psis,weights,well_imbalance])
-	# 	print(jumps_this_sample)
-
-	# 	weights = array(weights)
-
-	# 	fig = plt.figure(figsize=(12,12))
-	# 	im = plt.pcolormesh(times,list(range(N_trunc)),weights.T,norm=LogNorm(vmin=max(1e-15,weights.min()),vmax=weights.max()),cmap='hot')
-	# 	plt.xlabel("Time "+r"$t$",size=15)
-	# 	plt.ylabel("Eigenstate Number "+r"$i$",size=15)
-	# 	plt.tick_params(which="both",labelsize=15)
-	# 	cbar = fig.colorbar(im)
-	# 	cbar.ax.tick_params(labelsize=15)
-	# 	cbar.set_label(label=r'$|\langle\phi_i|\psi(t)\rangle|^2/||\psi(t)||^2$',size=20)
-	# 	plt.show()
-
-	# 	jumps.append(jumps_this_sample)
-	# 	well_imbalance.append(imbalance_this_sample)
-	# 	#other_paulis.append(other_paulis_this_sample)
-	# 	psis.append(psi)
-	# #end for loop over samples
-
-	# save(outfile,[jumps , well_imbalance, psis])
-
-	# #Plot the well imbalance
-	# plt.figure()
-	# for sample_num in range(nsamples):
-	# 	plt.plot(list(range(0,num_periods,4)),imbalance_this_sample[sample_num])
-	
-	# plt.xlabel("Driving Period")
-	# plt.ylabel("Well Imbalance")
-	# plt.show()
-
-
-
-
-
-
-
-
-
-
