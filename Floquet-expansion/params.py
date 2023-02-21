@@ -34,10 +34,21 @@ T = Tc/4
 dt_JJ = .1*T#.2*T
 Omega = 2*pi/T
 
+
+#Time-dependent JJ coupling
+def V_t(t):
+	if 0 <= t < dt_JJ:
+		return 1.0
+	else: 
+		return 0.0 
+
+
 #Number of timesteps per driving period and order for numerical integration
 #	Choose N_steps to be a power of 2 since we'll binary search in each period
-N_binary = 9
-N_steps = 2**N_binary
+N_b_unitary = 9
+N_steps_unitary = 2**N_b_unitary
+N_b_NH = 9
+N_steps_NH = 2**N_b_NH
 #dt = .005*T
 order = 5
 tol = 1e-6
