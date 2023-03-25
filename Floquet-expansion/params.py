@@ -58,6 +58,7 @@ quantization_parameter  = 1.0
 
 #Frequency to truncate fourier expansion of switching function at
 #	Assumes omega_q = 2*pi*q/T
+n_max = 100
 q_max = 115 
 
 #Center and decay length of Gassian switching function

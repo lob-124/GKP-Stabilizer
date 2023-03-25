@@ -91,7 +91,7 @@ def ff(E,t,W_ft,delta_t,gamma,temp,Lambda,omega_0=1):
 
         temp = abs(sqrt(2*pi*gamma*J)*W_w*exp(-1j*w*t + 1j*E*(t-delta_t)))
         print(temp)
-        val += sqrt(2*pi*gamma*J)*W_w*exp(-1j*w*t - 1j*E*(t-delta_t))
+        val += sqrt(2*pi*gamma*J)*W_w*exp(-1j*w*t + 1j*E*(t-delta_t))
 
     return val 
 

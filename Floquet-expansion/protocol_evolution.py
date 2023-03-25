@@ -13,6 +13,8 @@ from numpy.linalg import eigh,eigvals,norm
 from numpy import linspace,diag,cos,exp,around,log2
 from numpy.random import rand
 
+from scipy.linalg import schur
+
 from time import perf_counter
 
 if __name__ == "__main__":
@@ -43,8 +45,8 @@ if __name__ == "__main__":
 	## OPERATORS ##
 	# Dimensionless phase \phi 
 	Phi     = diag(phi)
-	X1 = expm(1j*Phi)
-	X2 = expm(-1j*Phi)
+	X_1 = expm(1j*Phi)
+	X_2 = expm(-1j*Phi)
 
 	# Canonically conjugate momentum to Phi (q)
 	Tmat    = get_tmat(D,dtype=complex)
@@ -80,24 +82,74 @@ if __name__ == "__main__":
 		return H0 + V_t(t)*V
 
 
-	#Compute the Floquet states |\phi_k(t)>
-	
+## BIG STEP: Compute the Floquet states |\phi_k(t)> ##
+	# First, compute evolution over a full period
+	U_T = eye(D)
+	dt_unitary = T/N_steps_unitary
+	for i in range(N_steps_unitary):
+		_H = H_t(dt_unitary*i)
+		for j in range(D):
+			U_T[:,j] = time_evolve(U_T[:,j],_H,dt_unitary,order=order)
+
+	#Diagonalize this operator to obtain the stationary states and quasienergies
+	_D, _U = schur(U_T) 
+	quasi_energies = 1j*log(diag(_D))/T
+
+	H_floq = diag(quasi_energies)	#Hamiltonian in the basis of Floquet modes
+
+	#Now we compute the Floquet modes by evolving and factoring out the "dynamical" 
+	#	phases from the quasienergies
+	floq_states = {0:_U}
+	curr = _U
+	for i in range(N_steps_unitary):
+		_H = H_t(dt_unitary*i)
+		for j in range(D):
+			curr[:,j] = time_evolve(curr[:,j],_H,dt_unitary,order=order)
+			curr[:,j] = exp(1j*quasi_energies[j]*dt_unitary)*curr[:,j]
+
+		floq_states[i] = curr
+
+
+	#Now we compute the Fourier components of <\phi_j(t)|X|\phi_k(t)>
+	X_ft_1 = []
+	X_ft_2 = []
+	for n in range(-n_max,n_max+1):
+		X_ft_1_this_n = zeros((D,D))
+		X_ft_2_this_n = zeros((D,D))
+		for i in range(D):
+			for j in range(D):
+				sum_1 = 0.0
+				sum_2 = 0.0
+				for k in range(N_steps_unitary):
+					phi_i , phi_j = floq_states[k][:,i] , floq_states[k][:,j]
+					sum_1 += phi_i.conj() @ X_1 @ phi_j
+					sum_2 += phi_i.conj() @ X_2 @ phi_j
+
+				X_ft_1_this_n[i,j] = sum_1*dt/T
+				X_ft_2_this_n[i,j] = sum_2*dt/T
+
+		X_ft_1.append(X_ft_1_this_n)
+		X_ft_2.append(X_ft_2_this_n)
+	#end loop over n
+
+	X_ft_1 = array(X_ft_1)
+	X_ft_2 = array(X_ft_2)
 
 	
+
 	#The jump operators at time t
 	def jump_ops(t):
-		
-
-		L_1 = jo.L(t,X,floq_states,quasi_energies,W_ft,gamma,temp,Lambda,omega_0=1)
-		L_2 = U @ js.L_tilde_energy_basis(X2_E,t_proj,E_window,(W_fourier,frequencies),dt_JJ,gamma,Temp,omega_c,omega0) @ U_dag
+		#Compute the jump operators in the basis of Floquet modes 
+		L_1 = jo.L(t,X_ft_1,None,quasi_energies,W_ft,gamma,temp,Lambda,omega_0=1)
+		L_2 = jo.L(t,X_ft_2,None,quasi_energies,W_ft,gamma,temp,Lambda,omega_0=1)
 
 		return L_1,L_2
 
 
-	#Compute the effective Hamiltonian governing SSE Evolution
+	#Compute the effective Hamiltonian governing SSE Evolution (in the basis of Floquet modes)
 	def H_eff(t,return_jump_ops=False):
 		L_1 , L_2 = jump_ops(t)
-		_H = H_t(t) - (1j*hbar/2)*(L_1.conj().T @ L_1 + L_2.conj().T @ L_2)
+		_H = H_floq - (1j*hbar/2)*(L_1.conj().T @ L_1 + L_2.conj().T @ L_2)
 
 		if return_jump_ops:		#Option to return jump operators as well
 			return _H , L_1, L_2
@@ -108,7 +160,7 @@ if __name__ == "__main__":
 
 	# ## SSE EVOLUTION ##
 
-	#Initial wavefunction 
+	#Initial wavefunction (in phi basis)
 	psi_0 = zeros(N_trunc)
 	psi_0[0] = 1/sqrt(2)
 	psi_0[1] = 1/sqrt(2) 

@@ -6,14 +6,14 @@ from units import *
 from numpy import linspace
 
 
-nsamples = 10            # Number of samples in SSE simulation
+nsamples = 1            # Number of samples in SSE simulation
 num_periods = 5000          # Number of cycles to include in simulation
 D        = 1000        # Dimension of Hilbert space
 N_wells  = 10
 pvec     = linspace(-2,2,400)   # Momenta to smaple for wigner function
 
 #Number of eigenvectors in Hilbert space to keep
-N_trunc = 100
+N_trunc = 400
  
 omega_c  = 0.5*THz         # Bath cutoff frequency
 gamma    = 1e-6*meV#1.2e-3*meV      # Bare system-bath coupling. Translates to a resistance. 
@@ -38,7 +38,7 @@ Omega = 2*pi/T
 #	Choose N_steps to be a power of 2 since we'll binary search in each period
 N_binary = 5
 N_steps = 2**N_binary
-step=10
+step = 4
 #dt = .005*T
 order = 5
 tol = 1e-6

@@ -18,9 +18,10 @@ def L(t,X,floq_states,quasi_energies,W_ft,gamma,temp,Lambda,omega_0=1):
         of the system operator X, and the frequencies. The first tuple element is assumed to be 
         a three index array: Fourier index (n), followed by the basis labels (j,k). The second tuple 
         element is the frequencies
-    floq_state: ndarray
+    floq_states: ndarray or None
         An array of the Floquet states (i.e. the eigenstates of the Floquet effective Hamiltonian
-            evolved by the micromotion operator)
+            evolved by the micromotion operator).
+        If None, returns the jump operator in the basis spanned by the Floquet states 
     quasi_energies: array
         An array of the quasienergies corresponding to the floquet states above
     W_ft: tuple of array(complex), array(float)
@@ -28,7 +29,7 @@ def L(t,X,floq_states,quasi_energies,W_ft,gamma,temp,Lambda,omega_0=1):
     gamma: float
         The system-bath coupling strength
     temp: float
-        Effective temperature of the bath
+        Temperature of the bath
     lambda: float
         Decay length appearing in the bath spectral function
     omega0: float, optional
@@ -65,8 +66,13 @@ def L(t,X,floq_states,quasi_energies,W_ft,gamma,temp,Lambda,omega_0=1):
 
                     _sum += X[0][n,j,k]*W_ft[0][q]*sqrt(2*pi*J)*exp(-1j*t*fourier_E) 
 
-            _L[k,l] += outer(floq_states[k].conj(),floq_states[l])*_sum*sqrt(gamma)
-
-    return _L
+            _L[k,l] = _sum*sqrt(gamma)
+    
+    if floq_states is None:
+        #Return L in the basis of floquet states at time t
+        return _L
+    else:
+        #Transform back to the given basis
+        return floq_states @ _L @ floq_states.conj().T
 
 
