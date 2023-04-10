@@ -6,14 +6,14 @@ from units import *
 from numpy import linspace
 
 
-nsamples = 10            # Number of samples in SSE simulation
+nsamples = 25            # Number of samples in SSE simulation
 num_periods = 5000          # Number of cycles to include in simulation
 D        = 1000        # Dimension of Hilbert space
 N_wells  = 10
 pvec     = linspace(-2,2,400)   # Momenta to smaple for wigner function
 
 #Number of eigenvectors in Hilbert space to keep
-N_trunc = 100
+N_trunc = 300
  
 omega_c  = 0.5*THz         # Bath cutoff frequency
 gamma    = 1e-6*meV#1.2e-3*meV      # Bare system-bath coupling. Translates to a resistance. 
@@ -27,28 +27,28 @@ cavity_frequency = 5*GHz
 Tc = 2*pi/cavity_frequency
 
 # Duration at which josephson junction is turned on
-#dt_JJ = 0.032*Tc
+dt_JJ = Tc/20
 #dt_0 = Tc/4*0.972	#What was this?
-#T = Tc/4+dt_JJ	#Why was this here?
-T = Tc/4
-dt_JJ = .2*T#.2*T
+T = Tc/4+dt_JJ	
+#T = Tc/4
+#dt_JJ = .2*T
 Omega = 2*pi/T
 
 #Number of timesteps per driving period and order for numerical integration
 #	Choose N_steps to be a power of 2 since we'll binary search in each period
-N_binary = 5
+N_binary = 13
 N_steps = 2**N_binary
-step=10
+step = 10
 #dt = .005*T
 order = 5
-tol = 1e-6
+tol = .01
 
 
 quantization_parameter  = 1.0
 
 #Frequency to truncate fourier expansion of switching function at
 #	Assumes omega_q = 2*pi*q/T
-q_max = 50 
+q_max = 70
 
 #Center and decay length of Gassian switching function
 #	Assumes W(t) = exp(-((t-t_0)/tau)^2)
