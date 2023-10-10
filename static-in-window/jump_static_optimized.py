@@ -141,6 +141,52 @@ def L_tilde_energy_basis(X,t,energies,W_ft,delta_t,gamma,temp,Lambda,omega_0=1):
     return L_tilde
 
 
+
+
+@jit(nopython=True)
+def L_static(X,energies,gamma,temp,Lambda,omega_0=1):
+    """
+    Computes the jump operator L for an operator X in the energy basis of the 
+        static system Hamiltonian H_0
+
+    Parameters
+    ----------
+    X : ndarray
+        The physical operator the jump operator is formed out of. Should be a matrix (2d array)
+            of components in the energy basis 
+    energies: array
+        An array of the energy eigenvalues correpsonding to each eigenvector in basis above
+    gamma: float
+        The system-bath coupling strength
+    temp: float
+        Effective temeprature of the bath
+    lambda: float
+        Decay length appearing in the bath spectral function
+    omega0: float, optional
+        Cutoff frequency in bath spectral function. Defaults to unity
+
+    Returns
+    -------
+    L : ndarray
+        The jump operator in the energy basis. The components are:
+                L_{mn} = \sqrt(2\piJ(E_n-E_m)) X_{mn} 
+    """
+    D = len(energies)
+    L = zeros((D,D),dtype=complex128)
+    for m in range(D):
+        for n in range(D):
+            omega = energies[n]-energies[m]
+            if abs(omega) < 1e-14:
+                J = temp/omega_0
+            else:
+                S_0 = abs(omega)*exp(-(omega**2)/(2*Lambda**2))/omega_0
+                BE = 1/(1-exp(-omega/temp))*sign(omega)
+                J = S_0 *BE
+
+            L[m,n] = sqrt(2*pi*gamma*J)*X[m,n]
+
+    return L
+
 if __name__ =="__main__":
     from numpy import array,exp,pi,sqrt,complex128
 

@@ -2,6 +2,13 @@
 *.dat
 *.npy
 
+#Compiled files
+*.pyc
+*/__pycache__/*
+
+#Ipython notebooks
+*.ipynb
+
 ## Core latex/pdflatex auxiliary files:
 *.aux
 *.lof

@@ -240,14 +240,14 @@ class bath():
         
         
 
-        g_int = sum(abs(self.jump_correlator))*self.dt 
+        self.g_int = sum(abs(self.jump_correlator))*self.dt 
         
         
         self.K_vec  = cumsum(self.correlation_function[::-1])[::-1]*self.dt
         K_int  = sum(abs(self.K_vec[self.times>=0]))*self.dt
         self.lambda_const = 4*K_int
-        self.Gamma0 = 4*g_int**2
-        self.tau = sum(abs(self.jump_correlator*self.times))*self.dt/g_int 
+        self.Gamma0 = 4*self.g_int**2
+        self.tau = sum(abs(self.jump_correlator*self.times))*self.dt/self.g_int 
         self.dephasing_speed = 4*pi*self.J(0)
         self.GammaJtau = 4*sum((self.times*abs(self.correlation_function))[self.times>=0])*self.dt
 

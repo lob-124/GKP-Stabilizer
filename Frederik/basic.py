@@ -172,73 +172,73 @@ def redirect_output(File,prestr="",timestamp=False):
     
     
 
-if sys.platform=="linux":
-    """ 
-    Define commands for getting CPU load and number of processes
-    """
-    def GetCPU():
-        STR=os.popen('''sar 1 1|awk '{usage = $3} END {print usage}' ''').readline()
+# if sys.platform=="linux":
+#     """ 
+#     Define commands for getting CPU load and number of processes
+#     """
+#     def GetCPU():
+#         STR=os.popen('''sar 1 1|awk '{usage = $3} END {print usage}' ''').readline()
     
-        """
-        sar %a %b   :  monitor system for a seconds b times. Output $1=time, %2=Cpus ('all' in our case) %3=Usage, percent, ....
+#         """
+#         sar %a %b   :  monitor system for a seconds b times. Output $1=time, %2=Cpus ('all' in our case) %3=Usage, percent, ....
         
         
-        | awk 'Command'   :  process output with following commands
-        """
+#         | awk 'Command'   :  process output with following commands
+#         """
         
         
-        try:
+#         try:
             
-            D1 = float(STR[0:2])
-            D2 = float(STR[3:5])*0.01
+#             D1 = float(STR[0:2])
+#             D2 = float(STR[3:5])*0.01
 
-        except ValueError:
-            D1 = float(STR[0:1])
+#         except ValueError:
+#             D1 = float(STR[0:1])
 
-            D2 = float(STR[2:4])*0.01
+#             D2 = float(STR[2:4])*0.01
         
-        return D1+D2
+#         return D1+D2
     
     
-    def GetNumberOfMyPythonProcesses():
+#     def GetNumberOfMyPythonProcesses():
 
-        STR = os.popen("ps auxwww|grep python|grep qxn|wc -l").readline()
+#         STR = os.popen("ps auxwww|grep python|grep qxn|wc -l").readline()
         
-        if STR[-1]=="\n":
-            Out =int(STR[:-1])
+#         if STR[-1]=="\n":
+#             Out =int(STR[:-1])
             
-        else:
-            Out =int(STR)
-        Out = Out -2
+#         else:
+#             Out =int(STR)
+#         Out = Out -2
         
        
-        return Out
+#         return Out
                 
     
-else:
-    import psutil
+# else:
+#     import psutil
     
-    def GetCPU():
-        return psutil.cpu_percent()
+#     def GetCPU():
+#         return psutil.cpu_percent()
     
-    def GetNumberOfMyPythonProcesses():
+#     def GetNumberOfMyPythonProcesses():
 
-        STR = os.popen("ps auxwww|grep python|grep Queue|wc -l").readline()
+#         STR = os.popen("ps auxwww|grep python|grep Queue|wc -l").readline()
         
         
-        if STR[-1]=="\n":
-            Out =int(STR[:-1])
+#         if STR[-1]=="\n":
+#             Out =int(STR[:-1])
             
-        else:
-            Out =int(STR)
+#         else:
+#             Out =int(STR)
         
-        Out=Out- 2 
+#         Out=Out- 2 
 
         
         
        
-        return Out
+#         return Out
             
-if __name__ == "__main__":
-    redirect_output("test.log",prestr="dfsd")
-    print("Hej")
+# if __name__ == "__main__":
+#     redirect_output("test.log",prestr="dfsd")
+#     print("Hej")
